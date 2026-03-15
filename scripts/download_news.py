@@ -31,6 +31,8 @@ TICKERS = [
     "AVGO", "PFE",  "KO",   "COST", "DIS",
 ]
 
+# TICKERS = ["AVGO", "BAC", "COST", "DIS", "KO", "MA", "PFE", "XOM"]
+
 # Date windows to sweep.  We split into two windows so we can call the API
 # twice per ticker and collect articles from a wider time range while staying
 # inside the limit=1000 cap per call.
