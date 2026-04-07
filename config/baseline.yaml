@@ -11,10 +11,10 @@ splits:
   test: 0.15
 
 text:
-  max_features: 20000
-  ngram_range: [1, 2]
-  min_df: 5
-  max_df: 0.8
+  max_features: 5000       # was 20000
+  ngram_range: [1, 1]      # was [1, 2]
+  min_df: 20               # was 5
+  max_df: 0.5              # was 0.8
 
 features:
   use_market_features: true
@@ -30,7 +30,7 @@ model:
   max_iter: 2000
   class_weight: balanced
   penalties: ["l2"]
-  c_values: [0.1, 0.3, 1.0]
+  c_values: [0.001, 0.003, 0.01]
   solver: saga
 
 artifacts:

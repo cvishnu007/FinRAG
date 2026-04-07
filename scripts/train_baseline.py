@@ -8,7 +8,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer, MaxAbsScaler, OneHotEncoder
+from sklearn.preprocessing import FunctionTransformer, StandardScaler, OneHotEncoder
 
 from src.evaluate import compute_metrics, print_metrics
 from src.features import build_feature_frame
@@ -21,26 +21,25 @@ def _extract_first_col(x):
     return x.iloc[:, 0]
 
 
-def time_split(df: pd.DataFrame, train_frac: float, val_frac: float):
-    if train_frac + val_frac >= 1.0:
-        raise ValueError("train_frac + val_frac must be < 1.0")
-
-    n_total = len(df)
-    n_train = int(n_total * train_frac)
-    n_val = int(n_total * val_frac)
-
-    train_df = df.iloc[:n_train]
-    val_df = df.iloc[n_train : n_train + n_val]
-    test_df = df.iloc[n_train + n_val :]
-
-    if train_df.empty or val_df.empty or test_df.empty:
-        raise ValueError(
-            "Split resulted in empty set. "
-            "Adjust split fractions or check dataset size."
-        )
-
+def time_split_per_ticker(df, train_frac=0.70, val_frac=0.15):
+    """Split each ticker independently so all tickers appear in all splits."""
+    train_parts, val_parts, test_parts = [], [], []
+    
+    for ticker, group in df.groupby("ticker"):
+        group = group.sort_values("published").reset_index(drop=True)
+        n = len(group)
+        n_train = int(n * train_frac)
+        n_val   = int(n * val_frac)
+        
+        train_parts.append(group.iloc[:n_train])
+        val_parts.append(group.iloc[n_train:n_train + n_val])
+        test_parts.append(group.iloc[n_train + n_val:])
+    
+    train_df = pd.concat(train_parts).sort_values("published").reset_index(drop=True)
+    val_df   = pd.concat(val_parts).sort_values("published").reset_index(drop=True)
+    test_df  = pd.concat(test_parts).sort_values("published").reset_index(drop=True)
+    
     return train_df, val_df, test_df
-
 
 def main():
     config_path = os.path.join("config", "baseline.yaml")
@@ -78,11 +77,16 @@ def main():
             market_close=market_cfg.get("market_close", "16:00"),
         )
 
-    train_df, val_df, test_df = time_split(
-        df,
-        train_frac=cfg["splits"]["train"],
-        val_frac=cfg["splits"]["val"],
-    )
+    # Fix #2: remove cross-ticker duplicate articles before splitting
+    before = len(df)
+    df = df.sort_values(["published", "ticker"])
+    df = df.drop_duplicates(subset=["title", "published"], keep="first")
+    df = df.sort_values("published").reset_index(drop=True)
+    print(f"Cross-ticker dedup: {before:,} → {len(df):,} rows (removed {before - len(df):,})")
+
+    # Fix #1: per-ticker chronological split
+    train_df, val_df, test_df = time_split_per_ticker(df, train_frac=0.70, val_frac=0.15)
+    print(f"Split sizes — Train: {len(train_df):,}  Val: {len(val_df):,}  Test: {len(test_df):,}")
 
     use_sentiment = bool(cfg.get("features", {}).get("use_sentiment", False))
     market_cfg = cfg.get("market", {})
@@ -137,7 +141,7 @@ def main():
     num_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="constant", fill_value=0.0)),
-            ("scaler", MaxAbsScaler()),
+            ("scaler", StandardScaler()),
         ]
     )
 

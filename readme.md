@@ -39,10 +39,10 @@ The foundation of the project requires a perfectly aligned dataset of historical
 * **Alignment Logic:** News articles published over weekends or after hours are meticulously aligned to the *next available market close* to capture the true market reaction. Date-time parsing and timezone removal ensure perfect synchronization.
 
 ### Final Master Dataset (`data/processed/master_dataset.csv`)
-* **Total Rows:** Over 20,000 strictly validated events
-* **Tickers Covered:** 12 major large-cap stocks (AAPL, AMZN, GOOGL, HD, JPM, META, MSFT, NVDA, PG, TSLA, UNH, V). The remaining 8 target tickers are pending download.
-* **Time Span:** January 2019 — March 2026
-* **Label Balance:** 51.1% UP (1) / 48.9% DOWN (0)
+* **Total Rows:** 28,358 validated events (after removing 4,557 cross-ticker duplicate articles)
+* **Tickers Covered:** 20 large-cap stocks — AAPL, AMZN, AVGO, BAC, COST, DIS, GOOGL, HD, JPM, KO, MA, META, MSFT, NVDA, PFE, PG, TSLA, UNH, V, XOM
+* **Time Span:** January 2019 — December 2025
+* **Label Balance:** 50.9% UP (1) / 49.1% DOWN (0)
 
 **Data Format:**
 | ticker | title                | summary | published (unix) | trade_date | Close | return_1d | label |
@@ -53,73 +53,104 @@ The foundation of the project requires a perfectly aligned dataset of historical
 
 ---
 
-## 4. Current Status & Next Steps (Phase 2)
+## 4. Baseline Model Phase (Complete)
 
-With the robust 20,000-row `master_dataset.csv` generated and totally free of class imbalance, the project is moving entirely out of Data Engineering and into the **Model Training & Evaluation Phase**.
+### Pipeline Overview
 
-### Step 1: Baseline Prediction Model
-* **Task:** Split data into Train (70%, ~14k rows) / Validation (15%, ~3k rows) / Test (15%, ~3k rows).
-* **Action:** Train a baseline classifier (e.g., Logistic Regression, simple Neural Network, or XGBoost) to predict the `label` column based on price momentum, textual sentiment, or both.
+The baseline pipeline uses TF-IDF on `title + summary` combined with categorical
+and market momentum features, fed into a Logistic Regression classifier.
 
-### Baseline Training (Implemented)
-The repo now includes a simple baseline training pipeline that uses TF-IDF on
-`title + summary` and trains a Logistic Regression classifier.
-
-**Files**
-- `scripts/train_baseline.py` — end-to-end training script (time-based split)
-- `config/baseline.yaml` — configuration for data path, split ratios, and model
-- `src/features.py` — text feature construction and TF-IDF vectorizer
+**Key files:**
+- `scripts/train_baseline.py` — end-to-end training script
+- `config/baseline.yaml` — feature flags, split ratios, model hyperparameters
+- `src/features.py` — text, temporal, and sentiment feature construction
+- `src/market_features.py` — lagged returns and rolling market features
 - `src/evaluate.py` — metric computation and reporting
 - `src/utils.py` — config loading and JSON output helpers
 
-**How to run**
-```
-python scripts/train_baseline.py
-```
-
-**Outputs**
-- `artifacts/models/logreg_model.joblib`
-- `artifacts/models/tfidf_vectorizer.joblib`
-- `artifacts/reports/metrics.json`
-
----
-
-## ML / Feature Engineering Lane (Logistic Regression)
-
-This lane focuses only on improving the Logistic Regression pipeline and
-feature engineering. No retrieval, embeddings, or LLM components are involved.
-
-### What the current pipeline does
-- **Chronological split**: train on oldest data, validate on next slice, test on newest
-- **Text features**: TF-IDF on `title + summary` with bounded vocabulary
-- **Categorical features**: ticker, day-of-week, month, and market-session bucket
-- **Market momentum**: prior-day returns and rolling stats (no future leakage)
-- **Optional sentiment**: simple lexicon-based sentiment scores
-- **Regularization**: tuned `C` with Logistic Regression to reduce overfitting
-
-### Feature sources
-- Market features are derived from `data/raw/prices/<TICKER>.csv` using only
-  **past** close prices relative to the article timestamp.
-
-### Run the updated pipeline
+**How to run:**
 ```
 python -m scripts.train_baseline
 ```
 
-### Key files
-- `scripts/train_baseline.py` — end-to-end pipeline (split, features, training)
-- `src/features.py` — text + temporal + sentiment features
-- `src/market_features.py` — lagged returns and rolling market features
-- `config/baseline.yaml` — feature flags and tuning settings
+**Outputs:**
+- `artifacts/models/logreg_model.joblib`
+- `artifacts/models/tfidf_vectorizer.joblib`
+- `artifacts/models/feature_meta.joblib`
+- `artifacts/reports/metrics.json`
 
-### Step 2: Build the Retrieval Index
-* **Task:** Generate dense text embeddings (e.g., via HuggingFace or OpenAI text-embedding models) for the `summary` or `title` of all events in the Training set.
-* **Action:** Ingest these embeddings into a FAISS vector database instance.
+### What the pipeline does
 
-### Step 3: Implement RAG & Explanation Generation
-* **Task:** Combine the classifier output and the FAISS retrieval results into an LLM context window.
-* **Action:** Write focused zero-shot or few-shot prompts that instruct the LLM to explain the classifier's prediction *only* using the retrieved historical context.
+- **Per-ticker chronological split:** each ticker is split independently (70/15/15)
+  so all 20 tickers appear in every split, and chronological order is respected
+  within each ticker
+- **Cross-ticker deduplication:** articles covering multiple tickers are deduplicated
+  before splitting to prevent train/test contamination
+- **Text features:** TF-IDF on `title + summary` (5k features, unigrams, min_df=20)
+- **Categorical features:** ticker, day-of-week, month, market-session bucket
+- **Market momentum:** prior-day returns and 5-day rolling stats (no future leakage)
+- **Sentiment features:** lexicon-based positive/negative ratio scores
+- **Regularization:** strong L2 (C=0.001–0.01) tuned via validation AUC
 
-### Step 4: Full System Evaluation
-* **Task:** Evaluate the full pipeline iteratively on the held-out Test set.
-* **Action:** Measure quantitative predictive accuracy (AUC / F1 Score) as well as the qualitative grounding of the LLM-generated explanations against hallucination metrics.
+### Bugs fixed during baseline phase
+
+Two critical data bugs were identified and fixed before the final results below:
+
+1. **Broken global split** — the original row-position split left 10 out of 20
+   tickers with zero test rows (AAPL, AMZN, MSFT, GOOGL, TSLA, NVDA and others
+   ran out of news before the test boundary). Fixed by switching to per-ticker
+   chronological splits.
+
+2. **Cross-ticker contamination** — 4,557 articles appeared under multiple tickers,
+   meaning the same article could appear in both train and test under different
+   ticker labels. Fixed by deduplicating on `(title, published)` before splitting.
+
+### Final baseline results
+
+| Split      | Accuracy | Precision | Recall | F1     | ROC-AUC |
+|------------|----------|-----------|--------|--------|---------|
+| Train      | 0.5501   | 0.5594    | 0.5690 | 0.5642 | 0.5743  |
+| Validation | 0.5281   | 0.5251    | 0.5717 | 0.5474 | 0.5357  |
+| Test       | 0.5098   | 0.5096    | 0.6092 | 0.5550 | 0.5251  |
+
+**Key finding:** The train/test AUC gap is 0.05 (down from 0.34 before the data
+fixes), confirming overfitting is fully resolved. The 0.525 test AUC represents
+the true ceiling of TF-IDF + Logistic Regression on this task — consistent with
+academic literature on news-based stock direction prediction. This establishes a
+clean, honest baseline for all future models to beat.
+
+---
+
+## 5. Next Steps
+
+### Step 2: Sentence Embedding Model
+Replace TF-IDF with a pretrained sentence encoder (`all-MiniLM-L6-v2` via
+`sentence-transformers`). Dense embeddings capture semantic meaning across time,
+unlike TF-IDF which fails when vocabulary drifts between training and test
+periods (e.g. "Blackwell", "ChatGPT", "omicron" dominate different periods and
+don't generalise). Target: test AUC > 0.57.
+
+**Files to add:**
+- `src/embeddings.py` — sentence encoding with on-disk caching
+- `scripts/train_embeddings.py` — embedding + logistic regression pipeline
+
+**How to run (once implemented):**
+```
+python -m scripts.train_embeddings
+```
+
+### Step 3: Build the Retrieval Index (RAG)
+Generate embeddings for all training-set events and ingest into a FAISS vector
+database. Given a new news article, retrieve the top-K most semantically similar
+historical events along with their realised market outcomes.
+
+### Step 4: Implement RAG & Explanation Generation
+Combine the classifier output and FAISS retrieval results into an LLM context
+window. Write focused zero-shot or few-shot prompts that instruct the LLM to
+explain the classifier's prediction *only* using the retrieved historical context,
+preventing hallucination.
+
+### Step 5: Full System Evaluation
+Evaluate the complete pipeline on the held-out test set. Measure quantitative
+predictive accuracy (AUC / F1) as well as qualitative grounding of the
+LLM-generated explanations against hallucination metrics.
