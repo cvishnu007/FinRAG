@@ -61,6 +61,57 @@ With the robust 20,000-row `master_dataset.csv` generated and totally free of cl
 * **Task:** Split data into Train (70%, ~14k rows) / Validation (15%, ~3k rows) / Test (15%, ~3k rows).
 * **Action:** Train a baseline classifier (e.g., Logistic Regression, simple Neural Network, or XGBoost) to predict the `label` column based on price momentum, textual sentiment, or both.
 
+### Baseline Training (Implemented)
+The repo now includes a simple baseline training pipeline that uses TF-IDF on
+`title + summary` and trains a Logistic Regression classifier.
+
+**Files**
+- `scripts/train_baseline.py` — end-to-end training script (time-based split)
+- `config/baseline.yaml` — configuration for data path, split ratios, and model
+- `src/features.py` — text feature construction and TF-IDF vectorizer
+- `src/evaluate.py` — metric computation and reporting
+- `src/utils.py` — config loading and JSON output helpers
+
+**How to run**
+```
+python scripts/train_baseline.py
+```
+
+**Outputs**
+- `artifacts/models/logreg_model.joblib`
+- `artifacts/models/tfidf_vectorizer.joblib`
+- `artifacts/reports/metrics.json`
+
+---
+
+## ML / Feature Engineering Lane (Logistic Regression)
+
+This lane focuses only on improving the Logistic Regression pipeline and
+feature engineering. No retrieval, embeddings, or LLM components are involved.
+
+### What the current pipeline does
+- **Chronological split**: train on oldest data, validate on next slice, test on newest
+- **Text features**: TF-IDF on `title + summary` with bounded vocabulary
+- **Categorical features**: ticker, day-of-week, month, and market-session bucket
+- **Market momentum**: prior-day returns and rolling stats (no future leakage)
+- **Optional sentiment**: simple lexicon-based sentiment scores
+- **Regularization**: tuned `C` with Logistic Regression to reduce overfitting
+
+### Feature sources
+- Market features are derived from `data/raw/prices/<TICKER>.csv` using only
+  **past** close prices relative to the article timestamp.
+
+### Run the updated pipeline
+```
+python -m scripts.train_baseline
+```
+
+### Key files
+- `scripts/train_baseline.py` — end-to-end pipeline (split, features, training)
+- `src/features.py` — text + temporal + sentiment features
+- `src/market_features.py` — lagged returns and rolling market features
+- `config/baseline.yaml` — feature flags and tuning settings
+
 ### Step 2: Build the Retrieval Index
 * **Task:** Generate dense text embeddings (e.g., via HuggingFace or OpenAI text-embedding models) for the `summary` or `title` of all events in the Training set.
 * **Action:** Ingest these embeddings into a FAISS vector database instance.
