@@ -57,60 +57,24 @@ The foundation of the project requires a perfectly aligned dataset of historical
 
 With the robust 20,000-row `master_dataset.csv` generated and totally free of class imbalance, the project is moving entirely out of Data Engineering and into the **Model Training & Evaluation Phase**.
 
-### Step 1: Baseline Prediction Model
-* **Task:** Split data into Train (70%, ~14k rows) / Validation (15%, ~3k rows) / Test (15%, ~3k rows).
-* **Action:** Train a baseline classifier (e.g., Logistic Regression, simple Neural Network, or XGBoost) to predict the `label` column based on price momentum, textual sentiment, or both.
+## XGBoost Baseline (Chronological)
 
-### Baseline Training (Implemented)
-The repo now includes a simple baseline training pipeline that uses TF-IDF on
-`title + summary` and trains a Logistic Regression classifier.
+This adds an XGBoost classifier using the same feature engineering and
+chronological split as the current ML pipeline.
 
-**Files**
-- `scripts/train_baseline.py` — end-to-end training script (time-based split)
-- `config/baseline.yaml` — configuration for data path, split ratios, and model
-- `src/features.py` — text feature construction and TF-IDF vectorizer
-- `src/evaluate.py` — metric computation and reporting
-- `src/utils.py` — config loading and JSON output helpers
+### What it uses
+- **Same split**: train oldest, validate next, test newest
+- **Same features**: TF-IDF text + ticker + temporal + market momentum + sentiment
+- **Optional SVD**: reduce TF-IDF dimensionality for speed and stability
 
-**How to run**
+### Run XGBoost
 ```
-python scripts/train_baseline.py
-```
-
-**Outputs**
-- `artifacts/models/logreg_model.joblib`
-- `artifacts/models/tfidf_vectorizer.joblib`
-- `artifacts/reports/metrics.json`
-
----
-
-## ML / Feature Engineering Lane (Logistic Regression)
-
-This lane focuses only on improving the Logistic Regression pipeline and
-feature engineering. No retrieval, embeddings, or LLM components are involved.
-
-### What the current pipeline does
-- **Chronological split**: train on oldest data, validate on next slice, test on newest
-- **Text features**: TF-IDF on `title + summary` with bounded vocabulary
-- **Categorical features**: ticker, day-of-week, month, and market-session bucket
-- **Market momentum**: prior-day returns and rolling stats (no future leakage)
-- **Optional sentiment**: simple lexicon-based sentiment scores
-- **Regularization**: tuned `C` with Logistic Regression to reduce overfitting
-
-### Feature sources
-- Market features are derived from `data/raw/prices/<TICKER>.csv` using only
-  **past** close prices relative to the article timestamp.
-
-### Run the updated pipeline
-```
-python -m scripts.train_baseline
+python -m scripts.train_xgboost
 ```
 
 ### Key files
-- `scripts/train_baseline.py` — end-to-end pipeline (split, features, training)
-- `src/features.py` — text + temporal + sentiment features
-- `src/market_features.py` — lagged returns and rolling market features
-- `config/baseline.yaml` — feature flags and tuning settings
+- `scripts/train_xgboost.py` — XGBoost training with chrono split
+- `config/xgboost.yaml` — hyperparameters and feature flags
 
 ### Step 2: Build the Retrieval Index
 * **Task:** Generate dense text embeddings (e.g., via HuggingFace or OpenAI text-embedding models) for the `summary` or `title` of all events in the Training set.
