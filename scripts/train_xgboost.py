@@ -16,25 +16,21 @@ from src.market_features import add_market_features
 from src.utils import ensure_dir, load_yaml_config, save_json
 
 
-def time_split(df: pd.DataFrame, train_frac: float, val_frac: float):
-    if train_frac + val_frac >= 1.0:
-        raise ValueError("train_frac + val_frac must be < 1.0")
-
-    n_total = len(df)
-    n_train = int(n_total * train_frac)
-    n_val = int(n_total * val_frac)
-
-    train_df = df.iloc[:n_train]
-    val_df = df.iloc[n_train : n_train + n_val]
-    test_df = df.iloc[n_train + n_val :]
-
-    if train_df.empty or val_df.empty or test_df.empty:
-        raise ValueError(
-            "Split resulted in empty set. "
-            "Adjust split fractions or check dataset size."
-        )
-
-    return train_df, val_df, test_df
+def time_split_per_ticker(df, train_frac=0.70, val_frac=0.15):
+    train_parts, val_parts, test_parts = [], [], []
+    for ticker, group in df.groupby("ticker"):
+        group = group.sort_values("published").reset_index(drop=True)
+        n = len(group)
+        n_train = int(n * train_frac)
+        n_val   = int(n * val_frac)
+        train_parts.append(group.iloc[:n_train])
+        val_parts.append(group.iloc[n_train:n_train + n_val])
+        test_parts.append(group.iloc[n_train + n_val:])
+    return (
+        pd.concat(train_parts).sort_values("published").reset_index(drop=True),
+        pd.concat(val_parts).sort_values("published").reset_index(drop=True),
+        pd.concat(test_parts).sort_values("published").reset_index(drop=True),
+    )
 
 
 def load_xgboost():
@@ -142,8 +138,14 @@ def main():
             timezone=market_cfg.get("timezone", "America/New_York"),
             market_close=market_cfg.get("market_close", "16:00"),
         )
+    before = len(df)
+    df = df.sort_values(["published", "ticker"])
+    df = df.drop_duplicates(subset=["title", "published"], keep="first")
+    df = df.sort_values("published").reset_index(drop=True)
+    print(f"Cross-ticker dedup: {before:,} → {len(df):,} rows (removed {before - len(df):,})")
 
-    train_df, val_df, test_df = time_split(
+    
+    train_df, val_df, test_df = time_split_per_ticker(
         df,
         train_frac=cfg["splits"]["train"],
         val_frac=cfg["splits"]["val"],

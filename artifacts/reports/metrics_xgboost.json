@@ -1,34 +1,34 @@
 {
   "best_params": {
-    "max_depth": 4,
-    "min_child_weight": 20,
-    "subsample": 0.6,
-    "colsample_bytree": 0.6,
-    "reg_alpha": 1.0,
-    "reg_lambda": 3.0,
-    "learning_rate": 0.1,
-    "n_estimators": 400,
+    "max_depth": 3,
+    "min_child_weight": 50,
+    "subsample": 0.7,
+    "colsample_bytree": 0.7,
+    "reg_alpha": 2.0,
+    "reg_lambda": 5.0,
+    "learning_rate": 0.05,
+    "n_estimators": 300,
     "tree_method": "hist"
   },
   "train": {
-    "accuracy": 0.8315972222222222,
-    "precision": 0.8180093288006957,
-    "recall": 0.8676729559748427,
-    "f1": 0.8421095466753479,
-    "roc_auc": 0.9154887638383171
+    "accuracy": 0.6193740234867194,
+    "precision": 0.6077911313717365,
+    "recall": 0.722249581404511,
+    "f1": 0.6600954181294446,
+    "roc_auc": 0.6670488084739489
   },
   "validation": {
-    "accuracy": 0.5288636823982176,
-    "precision": 0.5141414141414141,
-    "recall": 0.633609958506224,
-    "f1": 0.5676579925650558,
-    "roc_auc": 0.542345490281721
+    "accuracy": 0.5206027784318342,
+    "precision": 0.5165354330708661,
+    "recall": 0.6188679245283019,
+    "f1": 0.5630901287553648,
+    "roc_auc": 0.5302927987864917
   },
   "test": {
-    "accuracy": 0.5135682462535439,
-    "precision": 0.5007042253521127,
-    "recall": 0.5910224438902744,
-    "f1": 0.5421273351124667,
-    "roc_auc": 0.5218984200898491
+    "accuracy": 0.5154566744730679,
+    "precision": 0.5132969034608379,
+    "recall": 0.657796451914099,
+    "f1": 0.5766318804992838,
+    "roc_auc": 0.5296292859248962
   }
 }
