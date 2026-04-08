@@ -1,0 +1,99 @@
+{
+  "generated_at": "2026-04-08T22:05:45.789936",
+  "n_examples": 100,
+  "errors": 0,
+  "accuracy": 0.48,
+  "baseline_auc": 0.5432,
+  "avg_similarity": 0.5935,
+  "avg_grounding": 0.53,
+  "well_grounded_pct": 0.55,
+  "ticker_stats": {
+    "BAC": {
+      "correct": 2,
+      "total": 5
+    },
+    "GOOGL": {
+      "correct": 2,
+      "total": 4
+    },
+    "JPM": {
+      "correct": 6,
+      "total": 13
+    },
+    "AAPL": {
+      "correct": 6,
+      "total": 9
+    },
+    "DIS": {
+      "correct": 5,
+      "total": 6
+    },
+    "KO": {
+      "correct": 2,
+      "total": 4
+    },
+    "UNH": {
+      "correct": 3,
+      "total": 5
+    },
+    "AMZN": {
+      "correct": 1,
+      "total": 5
+    },
+    "COST": {
+      "correct": 2,
+      "total": 4
+    },
+    "META": {
+      "correct": 0,
+      "total": 5
+    },
+    "AVGO": {
+      "correct": 3,
+      "total": 5
+    },
+    "NVDA": {
+      "correct": 2,
+      "total": 5
+    },
+    "TSLA": {
+      "correct": 1,
+      "total": 3
+    },
+    "PG": {
+      "correct": 4,
+      "total": 5
+    },
+    "MSFT": {
+      "correct": 0,
+      "total": 2
+    },
+    "PFE": {
+      "correct": 5,
+      "total": 9
+    },
+    "XOM": {
+      "correct": 0,
+      "total": 4
+    },
+    "MA": {
+      "correct": 1,
+      "total": 3
+    },
+    "V": {
+      "correct": 2,
+      "total": 3
+    },
+    "HD": {
+      "correct": 1,
+      "total": 1
+    }
+  },
+  "bucket_accuracy": {
+    "small  (|ret| < 1%)": 0.5217,
+    "medium (1-3%)": 0.4667,
+    "large  (|ret| > 3%)": 0.3333
+  },
+  "high_sim_accuracy": 0.5,
+  "low_sim_accuracy": 0.4744
+}
