@@ -1,0 +1,58 @@
+# XGBoost training configuration
+# Paths are workspace-relative
+
+data_path: data/processed/master_dataset.csv
+
+seed: 42
+
+splits:
+  train: 0.70
+  val: 0.15
+  test: 0.15
+
+text:
+  max_features: 20000
+  ngram_range: [1, 2]
+  min_df: 5
+  max_df: 0.8
+  use_svd: true
+  svd_components: 200
+
+features:
+  use_market_features: true
+  use_sentiment: true
+
+market:
+  prices_dir: data/raw/prices
+  timezone: America/New_York
+  market_open: "09:30"
+  market_close: "16:00"
+
+xgboost:
+  eval_metric: auc
+  early_stopping_rounds: 30
+  params_grid:
+    - max_depth: 3
+      min_child_weight: 10
+      subsample: 0.7
+      colsample_bytree: 0.7
+      reg_alpha: 0.5
+      reg_lambda: 2.0
+      learning_rate: 0.1
+      n_estimators: 300
+      tree_method: hist
+    - max_depth: 4
+      min_child_weight: 20
+      subsample: 0.6
+      colsample_bytree: 0.6
+      reg_alpha: 1.0
+      reg_lambda: 3.0
+      learning_rate: 0.1
+      n_estimators: 400
+      tree_method: hist
+
+artifacts:
+  model_path: artifacts/models/xgboost_model.joblib
+  preprocessor_path: artifacts/models/xgboost_preprocessor.joblib
+  metrics_path: artifacts/reports/metrics_xgboost.json
+  compare_path: artifacts/reports/metrics_compare.json
