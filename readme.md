@@ -67,7 +67,7 @@ Hallucination rate: **0%** across 100 evaluated examples.
 
 ---
 
-## 3. Data Engineering — Complete
+## 3. Data Engineering
 
 ### Sources
 - **News:** Alpha Vantage News Sentiment API (relevance >= 0.1 per ticker)
@@ -114,12 +114,11 @@ applied only at feature-engineering time.
 - **Cross-ticker dedup critical:** 4,557 articles appeared under multiple
   tickers — deduplication before splitting prevented train/test leakage
 
-### Key Scripts
+### Data Scripts
 
 | Script | Purpose |
 |---|---|
 | `scripts/download_news.py` | Alpha Vantage news fetch |
-| `scripts/download_news_retry.py` | Retry for empty tickers |
 | `scripts/download_prices.py` | yfinance OHLCV download |
 | `scripts/download_spy.py` | SPY benchmark download |
 | `scripts/merge_data.py` | Align news to next trading day |
@@ -127,7 +126,7 @@ applied only at feature-engineering time.
 
 ---
 
-## 4. Modelling — Complete
+## 4. Modelling
 
 ### All Experiments (Chronological)
 
@@ -141,6 +140,9 @@ applied only at feature-engineering time.
 | Embeddings | MiniLM + LogReg | 0.5250 | 0.5878 | 0.063 | Same as TF-IDF |
 | Embeddings | FinBERT-tone alone | 0.5324 | 0.5677 | 0.035 | Best embedding model |
 | Embeddings | FinBERT-tone + Blend | 0.5432 | — | — | Tied with TF-IDF blend |
+
+> Full experiment scripts are archived in `experiments/` — see
+> `experiments/README.md` for details on each run.
 
 ### Key Conclusion on Embeddings
 
@@ -192,40 +194,7 @@ artifacts/models/blend_meta.joblib
 
 ---
 
-## 5. Embedding Experiments — Complete
-
-### MiniLM (`scripts/train_embeddings.py`)
-
-Replaced TF-IDF with `all-MiniLM-L6-v2` (384-dim dense embeddings).
-Test AUC: **0.5250** — identical to TF-IDF baseline.
-
-### FinBERT-tone (`scripts/train_finbert.py`)
-
-Replaced MiniLM with `yiyanghkust/finbert-tone` (768-dim financial
-embeddings). Best pure embedding model tested.
-Test AUC: **0.5324** — beats MiniLM by 0.007 but below blend baseline.
-
-Encoding time: ~50 minutes on CPU for 25,632 texts.
-All embeddings cached at `artifacts/cache/embeddings.pkl`.
-
-### FinBERT-tone + Full Blend (`scripts/train_finbert_blend.py`)
-
-Combined FinBERT embeddings with the full blend pipeline (LM sentiment
-+ label filter + LogReg/RF blend). The one experiment that hadn't been
-run — result was definitive.
-Test AUC: **0.5432** — exactly tied with TF-IDF blend to 4 decimal places.
-
-This conclusively proves the ceiling is the signal, not the model.
-
-**Embedding cache:**
-```
-artifacts/cache/embeddings.pkl    ← MiniLM (384-dim) + FinBERT (768-dim)
-                                     both cached, keyed by model name
-```
-
----
-
-## 6. RAG Retrieval Index — Complete
+## 5. RAG Retrieval Index
 
 FAISS flat inner-product index built over 17,933 training-set MiniLM
 embeddings. Given any article, retrieves the top-5 most semantically
@@ -255,7 +224,7 @@ artifacts/retrieval/metadata.pkl
 
 ---
 
-## 7. Explanation Generation — Complete
+## 6. Explanation Generation
 
 LLaMA 3.3 70B via Groq API (free tier) generates grounded explanations
 from the blend model probability + top-5 retrieved historical analogues.
@@ -296,7 +265,7 @@ Explanation:
 
 ---
 
-## 8. Full System Evaluation — Complete
+## 7. Full System Evaluation
 
 100-example evaluation on held-out test set.
 
@@ -381,37 +350,36 @@ best.
 
 ---
 
-## 9. How to Run
+## 8. How to Run
 
 ### Setup
 
 ```bash
 pip install yfinance pandas scikit-learn sentence-transformers \
-            faiss-cpu groq joblib pyyaml xgboost transformers torch
+            faiss-cpu groq joblib pyyaml transformers torch
 ```
 
-### Full pipeline
+### Full Pipeline
 
 ```bash
-# 1. Data (already done — skip if data exists)
+# 1. Data (skip if data already exists)
 python scripts/download_prices.py
 python scripts/download_spy.py
 python scripts/download_news.py
 python scripts/merge_data.py
 
-# 2. Train best model
-python -m scripts.train_blend
+# 2. (Optional) Inspect dataset health
+python scripts/diagnose.py
 
-# 3. Train embedding models (optional — for comparison)
-python -m scripts.train_embeddings        # MiniLM (~5 min)
-python -m scripts.train_finbert           # FinBERT-tone (~50 min)
-python -m scripts.train_finbert_blend     # FinBERT + blend (~5 min, uses cache)
+# 3. Train production model
+python -m scripts.train_blend
 
 # 4. Build retrieval index
 python -m scripts.build_index
 
 # 5. Run explanations (10 examples)
-set GROQ_API_KEY=gsk_your_key_here
+set GROQ_API_KEY=gsk_your_key_here     # Windows
+export GROQ_API_KEY=gsk_your_key_here  # Mac/Linux
 python -m scripts.run_explain
 
 # 6. Full evaluation (100 examples)
@@ -420,67 +388,68 @@ python -m scripts.evaluate_system
 
 ---
 
-## 10. File Structure
+## 9. File Structure
 
 ```
 project/
-├── config/
-│   ├── baseline.yaml
-│   └── xgboost.yaml
+├── scripts/                          # Production pipeline
+│   ├── download_news.py              # Alpha Vantage news fetch
+│   ├── download_prices.py            # yfinance OHLCV download
+│   ├── download_spy.py               # SPY benchmark download
+│   ├── merge_data.py                 # Align news to next trading day
+│   ├── diagnose.py                   # Dataset diagnostic report
+│   ├── train_blend.py                # ← production model
+│   ├── train_finbert_blend.py        # ← best embedding experiment
+│   ├── build_index.py                # Build FAISS retrieval index
+│   ├── run_explain.py                # Generate explanations (10 examples)
+│   └── evaluate_system.py            # Full 100-example evaluation
+│
+├── experiments/                      # Archived research trail
+│   ├── README.md                     # Notes on each experiment
+│   ├── scripts/
+│   │   ├── train_baseline.py         # LogReg + TF-IDF baseline
+│   │   ├── train_tree_models.py      # RF + XGBoost (overfit)
+│   │   ├── train_embeddings.py       # MiniLM embeddings
+│   │   ├── train_finbert.py          # FinBERT-tone standalone
+│   │   └── download_news_retry.py    # One-time retry for empty tickers
+│   └── config/
+│       ├── baseline.yaml             # Config for train_baseline.py
+│       └── xgboost.yaml              # Config for train_tree_models.py
+│
+├── src/                              # Shared library modules
+│   ├── embeddings.py                 # Multi-model encoder with cache
+│   ├── evaluate.py                   # Metrics computation
+│   ├── explain.py                    # Groq LLM explanation generator
+│   ├── features.py                   # TF-IDF, LM sentiment, temporal features
+│   ├── market_features.py            # Lagged price momentum features
+│   ├── retrieval.py                  # FAISS index build + query
+│   └── utils.py                      # IO helpers
+│
 ├── data/
 │   ├── raw/
-│   │   ├── news/               # Per-ticker CSVs from Alpha Vantage
-│   │   └── prices/             # Per-ticker OHLCV + SPY.csv
+│   │   ├── news/                     # Per-ticker CSVs from Alpha Vantage
+│   │   └── prices/                   # Per-ticker OHLCV + SPY.csv
 │   └── processed/
 │       └── master_dataset.csv
-├── scripts/
-│   ├── download_news.py
-│   ├── download_news_retry.py
-│   ├── download_prices.py
-│   ├── download_spy.py
-│   ├── merge_data.py
-│   ├── diagnose.py
-│   ├── train_baseline.py
-│   ├── train_tree_models.py
-│   ├── train_blend.py              ← best model
-│   ├── train_embeddings.py         ← MiniLM experiment
-│   ├── train_finbert.py            ← FinBERT-tone experiment
-│   ├── train_finbert_blend.py      ← FinBERT + blend experiment
-│   ├── build_index.py
-│   ├── run_explain.py
-│   └── evaluate_system.py
-├── src/
-│   ├── embeddings.py               ← multi-model encoder with cache
-│   ├── evaluate.py
-│   ├── explain.py
-│   ├── features.py
-│   ├── market_features.py
-│   ├── retrieval.py
-│   └── utils.py
-└── artifacts/
+│
+└── artifacts/                        # Generated — excluded from git
     ├── cache/
-    │   └── embeddings.pkl          # MiniLM + FinBERT cached embeddings
+    │   └── embeddings.pkl            # MiniLM + FinBERT cached embeddings
     ├── models/
-    │   ├── logreg_blend.joblib     # production model ← use this
+    │   ├── logreg_blend.joblib       # ← production model
     │   ├── rf_blend.joblib
     │   ├── rf_imputer.joblib
     │   ├── rf_scaler.joblib
     │   ├── blend_meta.joblib
-    │   ├── minilm_logreg.joblib
-    │   ├── minilm_meta.joblib
-    │   ├── yiyanghkust_finbert-tone_logreg.joblib
     │   ├── finbert_blend_logreg.joblib
     │   ├── finbert_blend_rf.joblib
     │   ├── finbert_blend_imputer.joblib
     │   └── finbert_blend_scaler.joblib
     ├── retrieval/
-    │   ├── faiss_index.pkl         # 17,933 vector FAISS index
+    │   ├── faiss_index.pkl           # 17,933 vector FAISS index
     │   └── metadata.pkl
     └── reports/
-        ├── metrics.json
         ├── metrics_blend.json
-        ├── metrics_minilm.json
-        ├── metrics_yiyanghkust_finbert-tone.json
         ├── metrics_finbert_blend.json
         ├── explanations.json
         ├── evaluation_summary.json
@@ -489,15 +458,15 @@ project/
 
 ---
 
-## 11. Complete Results Summary
+## 10. Results Summary
 
 | Phase | Model | Test AUC | Status |
 |---|---|---|---|
 | Baseline | LogReg + TF-IDF | 0.5251 | ✅ Done |
-| Tree experiments | RF + market + sentiment | 0.5267 | ✅ Done — no improvement |
+| Tree experiments | RF + market + sentiment | 0.5267 | ✅ Done — overfit, no improvement |
 | Improved baseline | **Blend + LM + filter** | **0.5432** | ✅ Done — **BEST MODEL** |
 | MiniLM embeddings | MiniLM + LogReg | 0.5250 | ✅ Done — same as baseline |
-| FinBERT embeddings | FinBERT-tone + LogReg | 0.5324 | ✅ Done — best embedding |
+| FinBERT embeddings | FinBERT-tone + LogReg | 0.5324 | ✅ Done — best embedding alone |
 | FinBERT + blend | FinBERT-tone + full blend | 0.5432 | ✅ Done — tied with best |
 | RAG retrieval index | FAISS + MiniLM | — | ✅ Done — 17,933 vectors |
 | Explanation generation | LLaMA 3.3 70B + RAG | 0% hallucination | ✅ Done |
@@ -513,4 +482,3 @@ Efficient Market Hypothesis. The value of this system lies not in
 marginal AUC improvements but in the **explanation layer** — grounded,
 citation-backed, hallucination-free analytical output that makes the
 model's reasoning transparent and auditable.
-```
