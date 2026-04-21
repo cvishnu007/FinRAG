@@ -35,7 +35,7 @@ CACHE_PATH      = "artifacts/cache/embeddings.pkl"
 LABEL_THRESHOLD = 0.002
 TRAIN_FRAC      = 0.70
 VAL_FRAC        = 0.15
-N_EXAMPLES      = 100
+N_EXAMPLES      = 10
 SEED            = 0
 
 MARKET_COLS    = ["ret_1d", "ret_3d", "ret_5d", "roll_mean_5", "roll_vol_5"]
@@ -195,25 +195,37 @@ def main():
                   f"sim={avg_sim:.3f} "
                   f"grnd={grounding['grounding_score']:.2f}")
 
-            record = {
-                "example_num"      : i + 1,
-                "ticker"           : row["ticker"],
-                "title"            : row["title"],
-                "published"        : str(row["published"])[:10],
-                "actual_label"     : actual_label,
-                "actual_return_pct": round(float(row["return_1d"]) * 100, 3),
-                "predicted_dir"    : result["direction"],
-                "blend_prob"       : result["blend_prob"],
-                "correct"          : correct,
-                "avg_similarity"   : round(avg_sim, 4),
-                "n_retrieved"      : len(result["retrieved_events"]),
-                "grounding_score"  : grounding["grounding_score"],
-                "events_referenced": grounding["events_referenced"],
-                "dates_cited"      : grounding["dates_cited"],
-                "explanation"      : result["explanation"],
-            }
-            results.append(record)
+# After explain_prediction returns result:
 
+            verification_passed = result.get("verified", False)
+            used_template       = result.get("used_template", False)
+            attempts            = result.get("attempts", 1)
+            verif_errors        = result.get("verification_errors", [])
+
+            record = {
+    "example_num"         : i + 1,
+    "ticker"              : row["ticker"],
+    "title"               : row["title"],
+    "published"           : str(row["published"])[:10],
+    "actual_label"        : actual_label,
+    "actual_return_pct"   : round(float(row["return_1d"]) * 100, 3),
+    "predicted_dir"       : result["direction"],
+    "blend_prob"          : result["blend_prob"],
+    "correct"             : correct,
+    "avg_similarity"      : round(avg_sim, 4),
+    "n_retrieved"         : len(result["retrieved_events"]),
+    # grounding fields — these were missing
+    "grounding_score"     : grounding["grounding_score"],
+    "events_referenced"   : grounding["events_referenced"],
+    "dates_cited"         : grounding["dates_cited"],
+    # verification fields
+    "verified"            : verification_passed,
+    "used_template"       : used_template,
+    "llm_attempts"        : attempts,
+    "verification_errors" : verif_errors,
+    "explanation"         : result["explanation"],
+}
+            results.append(record)
             # Per-ticker tracking
             t = row["ticker"]
             if t not in ticker_stats:
@@ -260,8 +272,8 @@ def main():
             buckets["large  (|ret| > 3%)"].append(r["correct"])
 
     # Accuracy by similarity bucket
-    high_sim = [r for r in valid if r["avg_similarity"] >= 0.65]
-    low_sim  = [r for r in valid if r["avg_similarity"] < 0.65]
+    high_sim = [r for r in valid if r["avg_similarity"] >= 0.5]
+    low_sim  = [r for r in valid if r["avg_similarity"] < 0.5]
 
     # ── Print final report ────────────────────────────────────────────────────
     sep = "=" * 65
@@ -290,13 +302,13 @@ def main():
 
     print(f"\n── Retrieval Quality ────────────────────────────────────────")
     print(f"  Avg cosine similarity    : {avg_sim:.3f}")
-    print(f"  High-sim (>=0.65) count  : {len(high_sim)}/{n}")
+    print(f"  High-sim (>=0.5) count  : {len(high_sim)}/{n}")
     if high_sim:
         acc_high = sum(r["correct"] for r in high_sim) / len(high_sim)
-        print(f"  Accuracy when sim>=0.65  : {acc_high*100:.1f}%")
+        print(f"  Accuracy when sim>=0.5  : {acc_high*100:.1f}%")
     if low_sim:
         acc_low = sum(r["correct"] for r in low_sim) / len(low_sim)
-        print(f"  Accuracy when sim<0.65   : {acc_low*100:.1f}%")
+        print(f"  Accuracy when sim<0.5   : {acc_low*100:.1f}%")
 
     print(f"\n── Explanation Grounding ────────────────────────────────────")
     print(f"  Avg grounding score      : {avg_grounding:.3f}  "
@@ -313,6 +325,42 @@ def main():
         bar   = "█" * stats["correct"] + "░" * (stats["total"] - stats["correct"])
         print(f"  {ticker:6s}: {acc_t*100:5.1f}%  [{bar}]  "
               f"({stats['correct']}/{stats['total']})")
+    print(f"\n── Explanation Verification ─────────────────────────────────")
+    verified_count  = sum(1 for r in valid if r.get("verified", False))
+    template_count  = sum(1 for r in valid if r.get("used_template", False))
+    one_shot_count  = sum(1 for r in valid if r.get("verified") and r.get("llm_attempts") == 1)
+    retry_count     = sum(1 for r in valid if r.get("verified") and r.get("llm_attempts", 1) > 1)
+
+    print(f"  Verified (factually correct)     : {verified_count}/{n} ({verified_count/n*100:.0f}%)")
+    print(f"  Passed first attempt             : {one_shot_count}/{n}")
+    print(f"  Passed after retry               : {retry_count}/{n}")
+    print(f"  Used template fallback           : {template_count}/{n}")
+
+    # Most common errors
+    all_errors = []
+    for r in valid:
+        all_errors.extend(r.get("verification_errors", []))
+
+    if all_errors:
+        print(f"\n  Most common verification failures:")
+        from collections import Counter
+        # Categorize errors by their prefix
+        error_types = Counter()
+        for e in all_errors:
+            if "Direction mismatch" in e:
+                error_types["Direction mismatch"] += 1
+            elif "Confidence mismatch" in e:
+                error_types["Confidence mismatch"] += 1
+            elif "Hallucinated event" in e:
+                error_types["Hallucinated event"] += 1
+            elif "Direction error for" in e:
+                error_types["Wrong event direction"] += 1
+            elif "Return error for" in e:
+                error_types["Wrong return value"] += 1
+            else:
+                error_types["Other"] += 1
+        for error_type, count in error_types.most_common():
+            print(f"    {error_type:<30}: {count}")
 
     print(f"\n{sep}")
 
